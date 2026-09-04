@@ -1,18 +1,37 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTheme } from "../useTheme";
 import { useI18n } from "../useI18n";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, DownloadIcon, UploadIcon } from "../icons";
 
-export default function Sidebar({ boards, activeBoardId, onSelect, onCreate, onDelete, collapsed, onToggle, mobileOpen }) {
+export default function Sidebar({
+  boards,
+  activeBoardId,
+  onSelect,
+  onCreate,
+  onDelete,
+  onExport,
+  onImport,
+  collapsed,
+  onToggle,
+  mobileOpen,
+}) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const { theme, toggleTheme } = useTheme();
   const { t, lang, toggleLang } = useI18n();
+  const fileInputRef = useRef(null);
 
   function commitCreate() {
     const trimmed = name.trim();
     if (trimmed) onCreate(trimmed);
     setName("");
     setCreating(false);
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (file) onImport(file);
+    e.target.value = "";
   }
 
   return (
@@ -27,7 +46,7 @@ export default function Sidebar({ boards, activeBoardId, onSelect, onCreate, onD
           onClick={onToggle}
           title={collapsed ? t("expandTitle") : t("collapseTitle")}
         >
-          {collapsed ? "»" : "«"}
+          {collapsed ? <ChevronRightIcon size={13} /> : <ChevronLeftIcon size={13} />}
         </button>
       </div>
 
@@ -50,7 +69,7 @@ export default function Sidebar({ boards, activeBoardId, onSelect, onCreate, onD
                 title={t("deleteBoardTitle")}
                 onClick={() => onDelete(board.id)}
               >
-                &times;
+                <CloseIcon size={13} />
               </button>
             )}
           </div>
@@ -89,6 +108,25 @@ export default function Sidebar({ boards, activeBoardId, onSelect, onCreate, onD
           <button type="button" className="kb-icon-btn" onClick={toggleLang} aria-label="lang">
             {lang === "fr" ? "EN" : "FR"}
           </button>
+          <button type="button" className="kb-icon-btn" onClick={onExport} title={t("exportBtn")} aria-label="export">
+            <DownloadIcon size={13} />
+          </button>
+          <button
+            type="button"
+            className="kb-icon-btn"
+            onClick={() => fileInputRef.current?.click()}
+            title={t("importBtn")}
+            aria-label="import"
+          >
+            <UploadIcon size={13} />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            className="kb-hidden-file-input"
+            onChange={handleFileChange}
+          />
         </div>
       )}
 

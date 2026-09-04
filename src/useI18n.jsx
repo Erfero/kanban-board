@@ -34,6 +34,20 @@ const DICT = {
     deleteCardBtn: "Supprimer la carte",
     saveBtn: "Enregistrer",
     dateLocale: "fr-FR",
+    searchPlaceholder: "Rechercher une carte…",
+    filterAllPriorities: "Toutes priorités",
+    noResults: "Aucune carte ne correspond.",
+    undoBtn: "Annuler",
+    boardDeletedToast: "Tableau « {name} » supprimé.",
+    columnDeletedToast: "Colonne « {name} » supprimée.",
+    cardDeletedToast: "Carte « {name} » supprimée.",
+    exportBtn: "Exporter",
+    importBtn: "Importer",
+    importSuffix: "importé",
+    importError: "Fichier invalide, import annulé.",
+    checklistLabel: "Sous-tâches",
+    checklistPlaceholder: "Ajouter une sous-tâche + Entrée",
+    dragColumnTitle: "Glisser pour réordonner",
   },
   en: {
     sidebarBoards: "My boards",
@@ -68,6 +82,20 @@ const DICT = {
     deleteCardBtn: "Delete card",
     saveBtn: "Save",
     dateLocale: "en-US",
+    searchPlaceholder: "Search a card…",
+    filterAllPriorities: "All priorities",
+    noResults: "No card matches.",
+    undoBtn: "Undo",
+    boardDeletedToast: 'Board "{name}" deleted.',
+    columnDeletedToast: 'Column "{name}" deleted.',
+    cardDeletedToast: 'Card "{name}" deleted.',
+    exportBtn: "Export",
+    importBtn: "Import",
+    importSuffix: "imported",
+    importError: "Invalid file, import cancelled.",
+    checklistLabel: "Checklist",
+    checklistPlaceholder: "Add a subtask + Enter",
+    dragColumnTitle: "Drag to reorder",
   },
 };
 
@@ -89,7 +117,15 @@ export function LangProvider({ children }) {
   }, [lang]);
 
   const toggleLang = () => setLang((l) => (l === "fr" ? "en" : "fr"));
-  const t = (key) => DICT[lang][key] ?? key;
+  const t = (key, vars) => {
+    let str = DICT[lang][key] ?? key;
+    if (vars) {
+      for (const [k, v] of Object.entries(vars)) {
+        str = str.replace(`{${k}}`, v);
+      }
+    }
+    return str;
+  };
 
   return <I18nContext.Provider value={{ lang, t, toggleLang }}>{children}</I18nContext.Provider>;
 }

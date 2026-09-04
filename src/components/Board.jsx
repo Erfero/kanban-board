@@ -7,6 +7,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import Column from "./Column";
 import TaskCard from "./TaskCard";
 import TaskModal from "./TaskModal";
@@ -17,9 +18,24 @@ function findColumnOfCard(columns, cardId) {
   return columns.find((c) => c.cards.some((card) => card.id === cardId));
 }
 
-export default function Board({ board, dispatch }) {
+// When dragging a column, restrict collision candidates to other columns only —
+// otherwise closestCorners can match a card inside a column (its rect corners can
+// be numerically closer to the dragged column's corners than the column's own
+// wrapper), silently breaking the reorder.
+function collisionDetectionStrategy(args) {
+  if (args.active.data.current?.type === "column") {
+    const columnContainers = args.droppableContainers.filter(
+      (container) => container.data.current?.type === "column"
+    );
+    return closestCorners({ ...args, droppableContainers: columnContainers });
+  }
+  return closestCorners(args);
+}
+
+export default function Board({ board, dispatch, dispatchWithUndo, isFiltering }) {
   const { t } = useI18n();
   const [activeCard, setActiveCard] = useState(null);
+  const [activeColumn, setActiveColumn] = useState(null);
   const [openCard, setOpenCard] = useState(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState("");
@@ -34,15 +50,40 @@ export default function Board({ board, dispatch }) {
     return map;
   }, [board]);
 
+  const columnsById = useMemo(() => {
+    const map = new Map();
+    board.columns.forEach((col) => map.set(col.id, col));
+    return map;
+  }, [board]);
+
+  const totalVisibleCards = board.columns.reduce((sum, c) => sum + c.cards.length, 0);
+
   function handleDragStart(event) {
-    const card = cardsById.get(event.active.id);
+    const { active } = event;
+    if (active.data.current?.type === "column") {
+      setActiveColumn(columnsById.get(active.data.current.columnId) || null);
+      return;
+    }
+    const card = cardsById.get(active.id);
     setActiveCard(card || null);
   }
 
   function handleDragEnd(event) {
     const { active, over } = event;
     setActiveCard(null);
+    setActiveColumn(null);
     if (!over) return;
+
+    if (active.data.current?.type === "column") {
+      const activeColumnId = active.data.current.columnId;
+      const overColumnId = over.data.current?.type === "column" ? over.data.current.columnId : over.id;
+      if (!overColumnId || overColumnId === activeColumnId) return;
+      const fromIndex = board.columns.findIndex((c) => c.id === activeColumnId);
+      const toIndex = board.columns.findIndex((c) => c.id === overColumnId);
+      if (fromIndex === -1 || toIndex === -1) return;
+      dispatch({ type: "REORDER_COLUMNS", boardId: board.id, fromIndex, toIndex });
+      return;
+    }
 
     const fromColumn = findColumnOfCard(board.columns, active.id);
     if (!fromColumn) return;
@@ -89,6 +130,7 @@ export default function Board({ board, dispatch }) {
         priority: "medium",
         tags: [],
         dueDate: null,
+        checklist: [],
       },
     });
   }
@@ -98,7 +140,11 @@ export default function Board({ board, dispatch }) {
   }
 
   function handleDeleteCard(cardId) {
-    dispatch({ type: "DELETE_CARD", boardId: board.id, cardId });
+    const card = cardsById.get(cardId);
+    dispatchWithUndo(
+      { type: "DELETE_CARD", boardId: board.id, cardId },
+      t("cardDeletedToast", { name: card?.title ?? "" })
+    );
   }
 
   function handleRenameColumn(columnId, title) {
@@ -106,7 +152,11 @@ export default function Board({ board, dispatch }) {
   }
 
   function handleDeleteColumn(columnId) {
-    dispatch({ type: "DELETE_COLUMN", boardId: board.id, columnId });
+    const column = columnsById.get(columnId);
+    dispatchWithUndo(
+      { type: "DELETE_COLUMN", boardId: board.id, columnId },
+      t("columnDeletedToast", { name: column?.title ?? "" })
+    );
   }
 
   function commitNewColumn() {
@@ -120,58 +170,77 @@ export default function Board({ board, dispatch }) {
 
   return (
     <div className="kb-board">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="kb-columns">
-          {board.columns.map((column) => (
-            <Column
-              key={column.id}
-              column={column}
-              onOpenCard={setOpenCard}
-              onAddCard={handleAddCard}
-              onRename={handleRenameColumn}
-              onDelete={handleDeleteColumn}
-            />
-          ))}
-
-          <div className="kb-column kb-column-new">
-            {addingColumn ? (
-              <div className="kb-add-card-form">
-                <input
-                  autoFocus
-                  placeholder={t("addColumnPlaceholder")}
-                  value={newColumnTitle}
-                  onChange={(e) => setNewColumnTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitNewColumn();
-                    if (e.key === "Escape") setAddingColumn(false);
-                  }}
+      {isFiltering && totalVisibleCards === 0 ? (
+        <div className="kb-no-results">{t("noResults")}</div>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetectionStrategy}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={board.columns.map((c) => `col-${c.id}`)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="kb-columns">
+              {board.columns.map((column) => (
+                <Column
+                  key={column.id}
+                  column={column}
+                  onOpenCard={setOpenCard}
+                  onAddCard={handleAddCard}
+                  onRename={handleRenameColumn}
+                  onDelete={handleDeleteColumn}
+                  dragDisabled={isFiltering}
                 />
-                <div className="kb-add-card-actions">
-                  <button className="kb-btn kb-btn-accent" onClick={commitNewColumn}>
-                    {t("addBtn")}
-                  </button>
-                  <button className="kb-btn kb-btn-ghost" onClick={() => setAddingColumn(false)}>
-                    {t("cancelBtn")}
-                  </button>
+              ))}
+
+              {!isFiltering && (
+                <div className="kb-column kb-column-new">
+                  {addingColumn ? (
+                    <div className="kb-add-card-form">
+                      <input
+                        autoFocus
+                        placeholder={t("addColumnPlaceholder")}
+                        value={newColumnTitle}
+                        onChange={(e) => setNewColumnTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitNewColumn();
+                          if (e.key === "Escape") setAddingColumn(false);
+                        }}
+                      />
+                      <div className="kb-add-card-actions">
+                        <button className="kb-btn kb-btn-accent" onClick={commitNewColumn}>
+                          {t("addBtn")}
+                        </button>
+                        <button className="kb-btn kb-btn-ghost" onClick={() => setAddingColumn(false)}>
+                          {t("cancelBtn")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="kb-add-column-trigger" onClick={() => setAddingColumn(true)}>
+                      {t("addColumnTrigger")}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </SortableContext>
+
+          <DragOverlay>
+            {activeCard ? <TaskCard card={activeCard} dragging /> : null}
+            {activeColumn ? (
+              <div className="kb-column kb-column-overlay">
+                <div className="kb-column-header">
+                  <span className="kb-column-title">{activeColumn.title}</span>
                 </div>
               </div>
-            ) : (
-              <button className="kb-add-column-trigger" onClick={() => setAddingColumn(true)}>
-                {t("addColumnTrigger")}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <DragOverlay>
-          {activeCard ? <TaskCard card={activeCard} dragging /> : null}
-        </DragOverlay>
-      </DndContext>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
 
       {openCard && (
         <TaskModal

@@ -27,6 +27,11 @@ function seedData() {
                 priority: "high",
                 tags: ["Cadrage"],
                 dueDate: null,
+                checklist: [
+                  { id: uid(), text: "Réunion de cadrage", done: true },
+                  { id: uid(), text: "Liste des pages", done: true },
+                  { id: uid(), text: "Validation client", done: false },
+                ],
               },
               {
                 id: uid(),
@@ -35,6 +40,7 @@ function seedData() {
                 priority: "medium",
                 tags: ["Design"],
                 dueDate: null,
+                checklist: [],
               },
             ],
           },
@@ -229,6 +235,38 @@ function reducer(state, action) {
         ),
       };
     }
+    case "REORDER_COLUMNS": {
+      const { boardId, fromIndex, toIndex } = action;
+      return {
+        ...state,
+        boards: state.boards.map((b) => {
+          if (b.id !== boardId) return b;
+          const columns = [...b.columns];
+          const [moved] = columns.splice(fromIndex, 1);
+          columns.splice(toIndex, 0, moved);
+          return { ...b, columns };
+        }),
+      };
+    }
+    case "IMPORT_BOARDS": {
+      const importedBoards = action.boards.map((b) => ({
+        ...b,
+        id: uid(),
+        name: `${b.name} (${action.importLabel})`,
+        columns: b.columns.map((c) => ({
+          ...c,
+          id: uid(),
+          cards: c.cards.map((card) => ({ ...card, id: uid() })),
+        })),
+      }));
+      return {
+        ...state,
+        boards: [...state.boards, ...importedBoards],
+        activeBoardId: importedBoards[0]?.id ?? state.activeBoardId,
+      };
+    }
+    case "SET_STATE":
+      return action.state;
     case "MOVE_CARD": {
       const { boardId, cardId, fromColumnId, toColumnId, toIndex } = action;
       return {

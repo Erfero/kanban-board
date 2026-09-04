@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { tagColor } from "../utils/tags";
 import { useI18n } from "../useI18n";
+import { uid } from "../context/BoardsContext";
+import { TrashIcon, CloseIcon, PlusIcon } from "../icons";
 
 export default function TaskModal({ card, onClose, onSave, onDelete }) {
   const { t } = useI18n();
@@ -10,6 +12,8 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
   const [dueDate, setDueDate] = useState(card.dueDate || "");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState(card.tags || []);
+  const [checklist, setChecklist] = useState(card.checklist || []);
+  const [checklistInput, setChecklistInput] = useState("");
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -31,6 +35,24 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
     setTags(tags.filter((t) => t !== tag));
   }
 
+  function addChecklistItem() {
+    const trimmed = checklistInput.trim();
+    if (trimmed) {
+      setChecklist([...checklist, { id: uid(), text: trimmed, done: false }]);
+    }
+    setChecklistInput("");
+  }
+
+  function toggleChecklistItem(id) {
+    setChecklist(checklist.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
+  }
+
+  function removeChecklistItem(id) {
+    setChecklist(checklist.filter((item) => item.id !== id));
+  }
+
+  const checklistDone = checklist.filter((i) => i.done).length;
+
   function handleSave() {
     onSave({
       ...card,
@@ -39,6 +61,7 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
       priority,
       dueDate: dueDate || null,
       tags,
+      checklist,
     });
     onClose();
   }
@@ -53,7 +76,7 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
             onChange={(e) => setTitle(e.target.value)}
           />
           <button className="kb-modal-close" onClick={onClose}>
-            &times;
+            <CloseIcon size={17} />
           </button>
         </div>
 
@@ -100,7 +123,9 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
                 style={{ background: `${tagColor(tag)}26`, color: tagColor(tag) }}
               >
                 {tag}
-                <button onClick={() => removeTag(tag)}>&times;</button>
+                <button onClick={() => removeTag(tag)}>
+                  <CloseIcon size={10} />
+                </button>
               </span>
             ))}
             <input
@@ -116,6 +141,54 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
               }}
             />
           </div>
+
+          <label className="kb-field-label">
+            {t("checklistLabel")}
+            {checklist.length > 0 && (
+              <span className="kb-checklist-progress-label"> {checklistDone}/{checklist.length}</span>
+            )}
+          </label>
+          {checklist.length > 0 && (
+            <div className="kb-checklist-bar">
+              <div
+                className="kb-checklist-bar-fill"
+                style={{ width: `${(checklistDone / checklist.length) * 100}%` }}
+              />
+            </div>
+          )}
+          <div className="kb-checklist-items">
+            {checklist.map((item) => (
+              <label key={item.id} className="kb-checklist-item">
+                <input type="checkbox" checked={item.done} onChange={() => toggleChecklistItem(item.id)} />
+                <span className={item.done ? "kb-checklist-item-done" : ""}>{item.text}</span>
+                <button
+                  type="button"
+                  className="kb-checklist-item-remove"
+                  onClick={() => removeChecklistItem(item.id)}
+                  aria-label="remove"
+                >
+                  <CloseIcon size={11} />
+                </button>
+              </label>
+            ))}
+          </div>
+          <div className="kb-checklist-add">
+            <input
+              className="kb-tag-input kb-checklist-input"
+              placeholder={t("checklistPlaceholder")}
+              value={checklistInput}
+              onChange={(e) => setChecklistInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addChecklistItem();
+                }
+              }}
+            />
+            <button type="button" className="kb-checklist-add-btn" onClick={addChecklistItem} aria-label="add">
+              <PlusIcon size={14} />
+            </button>
+          </div>
         </div>
 
         <div className="kb-modal-footer">
@@ -126,7 +199,7 @@ export default function TaskModal({ card, onClose, onSave, onDelete }) {
               onClose();
             }}
           >
-            {t("deleteCardBtn")}
+            <TrashIcon size={13} /> {t("deleteCardBtn")}
           </button>
           <button className="kb-btn kb-btn-accent" onClick={handleSave}>
             {t("saveBtn")}
